@@ -1,0 +1,55 @@
+name: SonarCloud
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  build:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v1
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install ninja-build \
+                           libgles2-mesa-dev \
+                           libvulkan-dev \
+                           glslang-dev \
+                           libxrandr-dev \
+                           libsdl2-dev \
+                           libxt-dev \
+                           libxaw7-dev \
+                           libpugixml-dev \
+                           libfreetype-dev \
+                           doxygen
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: 1.3.204.0
+          cache: true
+      - name: Generate build files
+        run: |
+          mkdir build && cd build
+          cmake .. -GNinja \
+                   -DCMAKE_BUILD_TYPE=Debug \
+                   -DOGRE_BUILD_SAMPLES=ON \
+                   -DOGRE_BUILD_TOOLS=ON \
+                   -DOGRE_BUILD_TESTS=ON
+      - name: Run build-wrapper
+        run: |
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja -C build
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
